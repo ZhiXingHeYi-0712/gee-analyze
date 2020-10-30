@@ -16,7 +16,7 @@ class GeoPoint():
 
         self.Name = name
 
-        if isinstance(geometry, ee.Geometry):
+        if isinstance(geometry, ee.Geometry) or isinstance(geometry, ee.FeatureCollection):
             self.Gee_geometry = geometry
         elif isinstance(geometry, shapely.geometry.point.Point):
             self.Gee_geometry = ee.Geometry.Point([geometry.x, geometry.y])
@@ -34,7 +34,7 @@ class GeoPoint():
             self.Gee_geometry)
         self.BandName: list = self.images.first().bandNames().getInfo()[:1]
 
-    def generateNdviData(self, scale=0) -> None:
+    def generateNdviData(self, scale=1) -> None:
         '''
         :param scale 缩放倍率
         获取NDVI的主函数。
@@ -45,7 +45,7 @@ class GeoPoint():
             raise Exception('run setDataSets() first.')
 
         # 框定图片范围
-        geo_values: ee.List = self.images.select(self.BandName).getRegion(geometry=self.Gee_geometry, scale=10000)
+        geo_values: ee.List = self.images.select(self.BandName).getRegion(geometry=self.Gee_geometry, scale=500)
 
         # 转成python原生list，[0]是题头。
         geo_values_list: list = geo_values.getInfo()
@@ -71,6 +71,22 @@ class GeoPoint():
         result['NDVI'] *= scale
 
         self.Ndvi: pd.DataFrame = result
+
+    def getNdviMean(self, scale=1):
+        if self.images == None or self.BandName == None:
+            raise Exception('run setDataSets() first.')
+
+        # 框定图片范围
+        geo_values: ee.List = self.images.select(self.BandName).getRegion(geometry=self.Gee_geometry, scale=500)
+
+        # 转成python原生list，[0]是题头。
+        geo_values_list: list = geo_values.getInfo()
+        data = pd.DataFrame(geo_values_list[1:], columns=geo_values_list[0])
+
+        # 将GEE提供的时间戳转换成时间字符串
+        data['datetime'] = pd.to_datetime(data['time'], unit='ms', utc=False)
+        data.dropna(inplace=True)
+        return data.mean()['NDVI'] * scale
 
     def drawPlot(self, kind : str = 'default'):
         '''
